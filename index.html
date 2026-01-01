@@ -9,7 +9,7 @@
         body { 
             font-family: Arial, sans-serif; 
             overflow: hidden; 
-            background: #1a1a2e;
+            background: #000;
             color: white;
             touch-action: none;
         }
@@ -20,7 +20,7 @@
         }
         canvas { 
             display: block; 
-            background: linear-gradient(to bottom, #87CEEB, #98FB98);
+            background: linear-gradient(to bottom, #000000, #1a1a2e);
         }
         #ui {
             position: absolute;
@@ -33,7 +33,7 @@
             padding: 10px;
         }
         .control-btn {
-            background: #2c3e50;
+            background: rgba(44, 62, 80, 0.9);
             border: 3px solid #3498db;
             color: white;
             padding: 15px 25px;
@@ -46,9 +46,10 @@
             transition: all 0.2s;
             min-width: 140px;
             text-align: center;
+            z-index: 1000;
         }
         .control-btn:active {
-            background: #1a252f;
+            background: rgba(26, 37, 47, 0.9);
             transform: scale(0.95);
         }
         #joystick-container {
@@ -57,6 +58,7 @@
             bottom: 30px;
             width: 150px;
             height: 150px;
+            z-index: 1000;
         }
         #joystick {
             width: 100%;
@@ -81,19 +83,19 @@
             position: absolute;
             top: 20px;
             right: 20px;
-            background: #9b59b6;
+            background: rgba(155, 89, 182, 0.9);
             border-color: #8e44ad;
         }
         #ragdoll-toggle {
-            background: #e74c3c;
+            background: rgba(231, 76, 60, 0.9);
             border-color: #c0392b;
         }
         #jump-btn {
-            background: #2ecc71;
+            background: rgba(46, 204, 113, 0.9);
             border-color: #27ae60;
         }
         #attack-btn {
-            background: #f39c12;
+            background: rgba(243, 156, 18, 0.9);
             border-color: #d35400;
         }
         #stats {
@@ -104,6 +106,7 @@
             padding: 15px;
             border-radius: 10px;
             font-size: 16px;
+            z-index: 1000;
         }
         .blood-splat {
             position: absolute;
@@ -113,19 +116,23 @@
             pointer-events: none;
             opacity: 0.8;
             border-radius: 50%;
+            z-index: 100;
         }
-        .trap {
+        #loading {
             position: absolute;
-            background: #7f8c8d;
-            border: 3px solid #34495e;
-            border-radius: 5px;
-            pointer-events: none;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
+        <div id="loading">Загрузка 3D...</div>
         
         <div id="joystick-container">
             <div id="joystick">
@@ -149,523 +156,366 @@
         </div>
     </div>
 
+    <!-- Только необходимые библиотеки -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.19.0/dist/cannon-es.js"></script>
-
     <script>
-        // Основные переменные
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-        // Физический мир
-        const world = new CANNON.World();
-        world.gravity.set(0, -30, 0);
-        world.broadphase = new CANNON.SAPBroadphase(world);
-        world.allowSleep = true;
-
-        // Переменные управления
-        const keys = {};
-        let isRagdoll = false;
-        let isFirstPerson = false;
-        let playerBody;
-        let playerModel;
-        const bloodSplats = [];
-        const traps = [];
-        let moveVector = new THREE.Vector3();
-        let joystickActive = false;
-        let joystickVector = { x: 0, y: 0 };
-
-        // Создание игрока
-        function createPlayer() {
-            // Физическое тело
-            const shape = new CANNON.Box(new CANNON.Vec3(0.5, 1, 0.5));
-            const body = new CANNON.Body({
-                mass: 70,
-                position: new CANNON.Vec3(0, 5, 0),
-                shape: shape,
-                linearDamping: 0.9,
-                angularDamping: 0.9
-            });
-            playerBody = body;
-            world.addBody(body);
-
-            // 3D модель игрока
-            const group = new THREE.Group();
-
-            // Тело
-            const bodyGeo = new THREE.BoxGeometry(1, 2, 0.5);
-            const bodyMat = new THREE.MeshPhongMaterial({ color: 0x3498db });
-            const torso = new THREE.Mesh(bodyGeo, bodyMat);
-            torso.castShadow = true;
-            group.add(torso);
-
-            // Голова
-            const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
-            const headMat = new THREE.MeshPhongMaterial({ color: 0xF5CBA7 });
-            const head = new THREE.Mesh(headGeo, headMat);
-            head.position.y = 1.5;
-            head.castShadow = true;
-            group.add(head);
-
-            // Ноги
-            const legGeo = new THREE.BoxGeometry(0.3, 1, 0.3);
-            const legMat = new THREE.MeshPhongMaterial({ color: 0x2C3E50 });
-            
-            const leftLeg = new THREE.Mesh(legGeo, legMat);
-            leftLeg.position.set(-0.3, -1.5, 0);
-            leftLeg.castShadow = true;
-            group.add(leftLeg);
-
-            const rightLeg = new THREE.Mesh(legGeo, legMat);
-            rightLeg.position.set(0.3, -1.5, 0);
-            rightLeg.castShadow = true;
-            group.add(rightLeg);
-
-            // Руки
-            const armGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
-            const armMat = new THREE.MeshPhongMaterial({ color: 0xF5CBA7 });
-            
-            const leftArm = new THREE.Mesh(armGeo, armMat);
-            leftArm.position.set(-0.8, 0.5, 0);
-            leftArm.castShadow = true;
-            group.add(leftArm);
-
-            const rightArm = new THREE.Mesh(armGeo, armMat);
-            rightArm.position.set(0.8, 0.5, 0);
-            rightArm.castShadow = true;
-            group.add(rightArm);
-
-            scene.add(group);
-            playerModel = group;
-            return { body, model: group };
-        }
-
-        // Создание травы
-        function createGrass() {
-            const grassGeo = new THREE.PlaneGeometry(100, 100);
-            const grassTexture = new THREE.CanvasTexture(createGrassTexture());
-            const grassMat = new THREE.MeshLambertMaterial({ 
-                map: grassTexture,
-                side: THREE.DoubleSide
-            });
-            const grass = new THREE.Mesh(grassGeo, grassMat);
-            grass.rotation.x = -Math.PI / 2;
-            grass.position.y = -0.1;
-            grass.receiveShadow = true;
-            scene.add(grass);
-
-            // Физическая земля
-            const groundShape = new CANNON.Plane();
-            const groundBody = new CANNON.Body({ mass: 0 });
-            groundBody.addShape(groundShape);
-            groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-            world.addBody(groundBody);
-        }
-
-        function createGrassTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            
-            // Основа
-            ctx.fillStyle = '#27ae60';
-            ctx.fillRect(0, 0, 512, 512);
-            
-            // Травинки
-            ctx.strokeStyle = '#2ecc71';
-            ctx.lineWidth = 2;
-            for(let i = 0; i < 5000; i++) {
-                const x = Math.random() * 512;
-                const y = Math.random() * 512;
-                const height = 5 + Math.random() * 15;
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + (Math.random() - 0.5) * 3, y - height);
-                ctx.stroke();
-            }
-            
-            return canvas;
-        }
-
-        // Создание ловушек
-        function createTraps() {
-            // Гильотина
-            const guillotineGeo = new THREE.BoxGeometry(1, 3, 1);
-            const guillotineMat = new THREE.MeshPhongMaterial({ color: 0x7f8c8d });
-            const guillotine = new THREE.Mesh(guillotineGeo, guillotineMat);
-            guillotine.position.set(10, 1.5, 0);
-            guillotine.castShadow = true;
-            scene.add(guillotine);
-
-            // Лезвие
-            const bladeGeo = new THREE.BoxGeometry(0.1, 0.5, 1);
-            const bladeMat = new THREE.MeshPhongMaterial({ color: 0xbdc3c7 });
-            const blade = new THREE.Mesh(bladeGeo, bladeMat);
-            blade.position.set(10, 3, 0);
-            scene.add(blade);
-
-            // Анимация гильотины
-            let bladeDirection = 1;
-            function animateGuillotine() {
-                blade.position.y += bladeDirection * 0.05;
-                if(blade.position.y > 4 || blade.position.y < 1) {
-                    bladeDirection *= -1;
-                }
-            }
-
-            // Пила
-            const sawGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
-            const sawMat = new THREE.MeshPhongMaterial({ color: 0xe74c3c });
-            const saw = new THREE.Mesh(sawGeo, sawMat);
-            saw.position.set(-10, 1, 5);
-            saw.rotation.x = Math.PI / 2;
-            scene.add(saw);
-
-            let sawRotation = 0;
-            function animateSaw() {
-                sawRotation += 0.1;
-                saw.rotation.z = sawRotation;
-            }
-
-            traps.push({
-                mesh: guillotine,
-                blade: blade,
-                update: animateGuillotine,
-                position: new THREE.Vector3(10, 0, 0),
-                type: 'guillotine'
-            });
-
-            traps.push({
-                mesh: saw,
-                update: animateSaw,
-                position: new THREE.Vector3(-10, 1, 5),
-                type: 'saw'
-            });
-        }
-
-        // Кровь
-        function createBloodSplat(position) {
-            const splat = document.createElement('div');
-            splat.className = 'blood-splat';
-            splat.style.left = (Math.random() * window.innerWidth) + 'px';
-            splat.style.top = (Math.random() * window.innerHeight) + 'px';
-            document.body.appendChild(splat);
-            
-            bloodSplats.push(splat);
-            document.getElementById('blood-count').textContent = bloodSplats.length;
-            
-            setTimeout(() => {
-                if(splat.parentNode) {
-                    splat.parentNode.removeChild(splat);
-                }
-            }, 5000);
-        }
-
-        // Управление джойстиком
-        const joystick = document.getElementById('joystick');
-        const joystickHandle = document.getElementById('joystick-handle');
-        let joystickBounds = joystick.getBoundingClientRect();
-        let joystickCenter = { x: joystickBounds.left + 75, y: joystickBounds.top + 75 };
-
-        joystick.addEventListener('touchstart', (e) => {
-            joystickActive = true;
-            updateJoystick(e.touches[0]);
-            e.preventDefault();
+        // Ждём загрузки всех ресурсов
+        window.addEventListener('load', () => {
+            document.getElementById('loading').style.display = 'none';
+            initGame();
         });
 
-        document.addEventListener('touchmove', (e) => {
-            if(joystickActive) {
-                updateJoystick(e.touches[0]);
-                e.preventDefault();
-            }
-        });
-
-        document.addEventListener('touchend', (e) => {
-            if(joystickActive) {
-                joystickActive = false;
-                joystickHandle.style.transform = 'translate(-50%, -50%)';
-                joystickVector = { x: 0, y: 0 };
-                e.preventDefault();
-            }
-        });
-
-        function updateJoystick(touch) {
-            joystickBounds = joystick.getBoundingClientRect();
-            joystickCenter = { 
-                x: joystickBounds.left + joystickBounds.width / 2, 
-                y: joystickBounds.top + joystickBounds.height / 2 
-            };
-            
-            const x = touch.clientX - joystickCenter.x;
-            const y = touch.clientY - joystickCenter.y;
-            const distance = Math.sqrt(x * x + y * y);
-            const maxDistance = 60;
-            
-            if(distance > maxDistance) {
-                const angle = Math.atan2(y, x);
-                joystickVector = {
-                    x: Math.cos(angle) * maxDistance,
-                    y: Math.sin(angle) * maxDistance
-                };
-                joystickHandle.style.transform = `translate(${joystickVector.x}px, ${joystickVector.y}px)`;
-            } else {
-                joystickVector = { x: x, y: y };
-                joystickHandle.style.transform = `translate(${x}px, ${y}px)`;
-            }
-            
-            // Нормализация
-            joystickVector.x /= maxDistance;
-            joystickVector.y /= -maxDistance; // Инвертируем для интуитивности
-        }
-
-        // Обработка кнопок
-        document.getElementById('camera-toggle').addEventListener('click', () => {
-            isFirstPerson = !isFirstPerson;
-            document.getElementById('mode').textContent = isFirstPerson ? 'Первое лицо' : 'Третье лицо';
-        });
-
-        document.getElementById('ragdoll-toggle').addEventListener('click', () => {
-            isRagdoll = !isRagdoll;
-            document.getElementById('ragdoll-toggle').textContent = 
-                isRagdoll ? 'Ragdoll ВЫКЛ' : 'Ragdoll ВКЛ';
-            document.getElementById('state').textContent = isRagdoll ? 'Тряпка' : 'Жив';
-            
-            if(isRagdoll) {
-                playerBody.velocity.set(0, 10, 0);
-                playerBody.angularVelocity.set(
-                    Math.random() * 5,
-                    Math.random() * 5,
-                    Math.random() * 5
-                );
-            }
-        });
-
-        document.getElementById('jump-btn').addEventListener('click', () => {
-            if(!isRagdoll) {
-                playerBody.velocity.y = 15;
-            }
-        });
-
-        document.getElementById('attack-btn').addEventListener('click', () => {
-            // Анимация удара
-            if(playerModel && !isRagdoll) {
-                const arm = playerModel.children[4]; // Правая рука
-                const originalY = arm.position.y;
+        function initGame() {
+            try {
+                // 1. Создаём сцену
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x000000);
                 
-                // Анимация замаха
-                const swing = setInterval(() => {
-                    arm.position.y -= 0.5;
-                    if(arm.position.y < originalY - 2) {
-                        clearInterval(swing);
-                        const returnSwing = setInterval(() => {
-                            arm.position.y += 0.5;
-                            if(arm.position.y >= originalY) {
-                                clearInterval(returnSwing);
-                                arm.position.y = originalY;
-                            }
-                        }, 16);
-                    }
-                }, 16);
-            }
-        });
-
-        document.getElementById('reset-btn').addEventListener('click', () => {
-            playerBody.position.set(0, 5, 0);
-            playerBody.velocity.set(0, 0, 0);
-            playerBody.angularVelocity.set(0, 0, 0);
-            playerBody.quaternion.set(0, 0, 0, 1);
-            
-            // Удалить кровь
-            bloodSplats.forEach(splat => {
-                if(splat.parentNode) splat.parentNode.removeChild(splat);
-            });
-            bloodSplats.length = 0;
-            document.getElementById('blood-count').textContent = '0';
-        });
-
-        // Освещение
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-        scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(50, 50, 50);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.5;
-        directionalLight.shadow.camera.far = 500;
-        directionalLight.shadow.camera.left = -100;
-        directionalLight.shadow.camera.right = 100;
-        directionalLight.shadow.camera.top = 100;
-        directionalLight.shadow.camera.bottom = -100;
-        scene.add(directionalLight);
-
-        // Инициализация
-        createGrass();
-        createPlayer();
-        createTraps();
-
-        camera.position.set(0, 5, 10);
-        camera.lookAt(0, 2, 0);
-
-        // Обнаружение падений
-        let lastY = playerBody.position.y;
-        let fallStartY = playerBody.position.y;
-
-        // Игровой цикл
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // Обновление физики
-            world.step(1/60);
-
-            // Управление движением
-            if(!isRagdoll) {
-                moveVector.set(0, 0, 0);
+                // 2. Создаём камеру
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 5, 10);
                 
-                // Джойстик для мобильных
-                if(joystickActive) {
-                    moveVector.x = joystickVector.x * 20;
-                    moveVector.z = joystickVector.y * 20;
-                }
+                // 3. Создаём рендерер
+                const canvas = document.getElementById('game-canvas');
+                const renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas,
+                    antialias: true,
+                    alpha: false
+                });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 
-                // Клавиши для десктопа
-                if(keys['w'] || keys['ц']) moveVector.z = -20;
-                if(keys['s'] || keys['ы']) moveVector.z = 20;
-                if(keys['a'] || keys['ф']) moveVector.x = -20;
-                if(keys['d'] || keys['в']) moveVector.x = 20;
-
-                if(moveVector.length() > 0) {
-                    moveVector.normalize().multiplyScalar(20);
-                    playerBody.velocity.x = moveVector.x;
-                    playerBody.velocity.z = moveVector.z;
-                } else {
-                    // Трение при отсутствии ввода
-                    playerBody.velocity.x *= 0.9;
-                    playerBody.velocity.z *= 0.9;
-                }
-            }
-
-            // Синхронизация модели с физическим телом
-            if(playerModel) {
-                playerModel.position.copy(playerBody.position);
-                playerModel.position.y -= 1;
+                // 4. Освещение
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
                 
-                if(!isRagdoll) {
-                    playerModel.rotation.y = -Math.atan2(moveVector.x, moveVector.z) || playerModel.rotation.y;
-                    
-                    // Анимация ходьбы
-                    if(moveVector.length() > 0.1) {
-                        const time = Date.now() * 0.01;
-                        const leg1 = playerModel.children[2];
-                        const leg2 = playerModel.children[3];
-                        leg1.position.y = -1.5 + Math.sin(time) * 0.3;
-                        leg2.position.y = -1.5 - Math.sin(time) * 0.3;
-                    }
-                } else {
-                    playerModel.rotation.copy(playerBody.quaternion);
-                }
-            }
-
-            // Обновление камеры
-            if(playerBody) {
-                if(isFirstPerson) {
-                    camera.position.copy(playerModel.position);
-                    camera.position.y += 1.5;
-                    camera.rotation.copy(playerModel.rotation);
-                } else {
-                    camera.position.x = playerBody.position.x;
-                    camera.position.y = playerBody.position.y + 5;
-                    camera.position.z = playerBody.position.z + 10;
-                    camera.lookAt(playerBody.position.x, playerBody.position.y + 2, playerBody.position.z);
-                }
-            }
-
-            // Обновление ловушек
-            traps.forEach(trap => {
-                if(trap.update) trap.update();
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 20, 5);
+                directionalLight.castShadow = true;
+                scene.add(directionalLight);
                 
-                // Проверка столкновений
-                if(playerBody && trap.mesh) {
-                    const distance = playerBody.position.distanceTo(
-                        new CANNON.Vec3(trap.position.x, trap.position.y, trap.position.z)
+                // 5. Создаём землю
+                const groundGeometry = new THREE.PlaneGeometry(100, 100);
+                const groundMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x2d572c,
+                    side: THREE.DoubleSide
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.y = -0.1;
+                ground.receiveShadow = true;
+                scene.add(ground);
+                
+                // 6. Создаём игрока
+                const playerGroup = new THREE.Group();
+                
+                // Тело
+                const bodyGeometry = new THREE.BoxGeometry(0.8, 1.8, 0.5);
+                const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x3498db });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.castShadow = true;
+                playerGroup.add(body);
+                
+                // Голова
+                const headGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+                const headMaterial = new THREE.MeshLambertMaterial({ color: 0xffcc99 });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.y = 1.3;
+                head.castShadow = true;
+                playerGroup.add(head);
+                
+                // Ноги
+                const legGeometry = new THREE.BoxGeometry(0.3, 1, 0.3);
+                const legMaterial = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
+                
+                const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                leftLeg.position.set(-0.2, -1.4, 0);
+                leftLeg.castShadow = true;
+                playerGroup.add(leftLeg);
+                
+                const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                rightLeg.position.set(0.2, -1.4, 0);
+                rightLeg.castShadow = true;
+                playerGroup.add(rightLeg);
+                
+                // Руки
+                const armGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
+                const armMaterial = new THREE.MeshLambertMaterial({ color: 0xffcc99 });
+                
+                const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+                leftArm.position.set(-0.6, 0.5, 0);
+                leftArm.castShadow = true;
+                playerGroup.add(leftArm);
+                
+                const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+                rightArm.position.set(0.6, 0.5, 0);
+                rightArm.castShadow = true;
+                playerGroup.add(rightArm);
+                
+                playerGroup.position.set(0, 1, 0);
+                scene.add(playerGroup);
+                
+                // 7. Создаём несколько препятствий
+                const obstacleGeometry = new THREE.BoxGeometry(3, 5, 1);
+                const obstacleMaterial = new THREE.MeshLambertMaterial({ color: 0x7f8c8d });
+                
+                for(let i = 0; i < 5; i++) {
+                    const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+                    obstacle.position.set(
+                        Math.random() * 40 - 20,
+                        2.5,
+                        Math.random() * 40 - 20
                     );
+                    obstacle.castShadow = true;
+                    obstacle.receiveShadow = true;
+                    scene.add(obstacle);
+                }
+                
+                // 8. Переменные управления
+                let keys = {};
+                let isRagdoll = false;
+                let isFirstPerson = false;
+                let playerVelocity = { x: 0, z: 0 };
+                let playerRotation = 0;
+                let joystickActive = false;
+                let joystickVector = { x: 0, y: 0 };
+                let bloodCount = 0;
+                let legAnimation = 0;
+                
+                // 9. Джойстик для мобильных
+                const joystick = document.getElementById('joystick');
+                const joystickHandle = document.getElementById('joystick-handle');
+                
+                function updateJoystickPosition(e) {
+                    const rect = joystick.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
                     
-                    if(distance < 2) {
-                        if(trap.type === 'guillotine' && Math.random() < 0.01) {
+                    let x = e.clientX - centerX;
+                    let y = e.clientY - centerY;
+                    const distance = Math.sqrt(x * x + y * y);
+                    const maxDistance = 50;
+                    
+                    if(distance > maxDistance) {
+                        const angle = Math.atan2(y, x);
+                        x = Math.cos(angle) * maxDistance;
+                        y = Math.sin(angle) * maxDistance;
+                    }
+                    
+                    joystickHandle.style.transform = `translate(${x}px, ${y}px)`;
+                    joystickVector = {
+                        x: x / maxDistance,
+                        y: -y / maxDistance
+                    };
+                }
+                
+                joystick.addEventListener('touchstart', (e) => {
+                    joystickActive = true;
+                    updateJoystickPosition(e.touches[0]);
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('touchmove', (e) => {
+                    if(joystickActive) {
+                        updateJoystickPosition(e.touches[0]);
+                        e.preventDefault();
+                    }
+                });
+                
+                document.addEventListener('touchend', () => {
+                    joystickActive = false;
+                    joystickHandle.style.transform = 'translate(-50%, -50%)';
+                    joystickVector = { x: 0, y: 0 };
+                });
+                
+                // 10. Обработка кнопок
+                document.getElementById('camera-toggle').addEventListener('click', () => {
+                    isFirstPerson = !isFirstPerson;
+                    document.getElementById('mode').textContent = isFirstPerson ? 'Первое лицо' : 'Третье лицо';
+                });
+                
+                document.getElementById('ragdoll-toggle').addEventListener('click', () => {
+                    isRagdoll = !isRagdoll;
+                    document.getElementById('ragdoll-toggle').textContent = 
+                        isRagdoll ? 'Ragdoll ВЫКЛ' : 'Ragdoll ВКЛ';
+                    document.getElementById('state').textContent = isRagdoll ? 'Тряпка' : 'Жив';
+                    
+                    if(isRagdoll) {
+                        // Анимация падения
+                        playerGroup.rotation.x = Math.random() * Math.PI;
+                        playerGroup.rotation.z = Math.random() * Math.PI;
+                    } else {
+                        playerGroup.rotation.x = 0;
+                        playerGroup.rotation.z = 0;
+                    }
+                });
+                
+                document.getElementById('jump-btn').addEventListener('click', () => {
+                    if(!isRagdoll) {
+                        playerGroup.position.y += 2;
+                        setTimeout(() => {
+                            if(playerGroup.position.y > 1) {
+                                playerGroup.position.y = 1;
+                            }
+                        }, 300);
+                    }
+                });
+                
+                document.getElementById('attack-btn').addEventListener('click', () => {
+                    // Анимация удара
+                    const rightArm = playerGroup.children[4];
+                    const originalY = rightArm.position.y;
+                    
+                    let swing = 0;
+                    const interval = setInterval(() => {
+                        swing += 0.1;
+                        rightArm.position.y = originalY - Math.sin(swing) * 0.5;
+                        rightArm.rotation.z = Math.sin(swing) * 0.5;
+                        
+                        if(swing > Math.PI) {
+                            clearInterval(interval);
+                            rightArm.position.y = originalY;
+                            rightArm.rotation.z = 0;
+                        }
+                    }, 16);
+                });
+                
+                document.getElementById('reset-btn').addEventListener('click', () => {
+                    playerGroup.position.set(0, 1, 0);
+                    playerGroup.rotation.set(0, 0, 0);
+                    playerVelocity = { x: 0, z: 0 };
+                    bloodCount = 0;
+                    document.getElementById('blood-count').textContent = '0';
+                    isRagdoll = false;
+                    document.getElementById('ragdoll-toggle').textContent = 'Ragdoll ВКЛ';
+                    document.getElementById('state').textContent = 'Жив';
+                });
+                
+                // 11. Клавиатура для десктопа
+                window.addEventListener('keydown', (e) => {
+                    keys[e.key.toLowerCase()] = true;
+                    
+                    if(e.key === 'c' || e.key === 'с') {
+                        isFirstPerson = !isFirstPerson;
+                        document.getElementById('mode').textContent = isFirstPerson ? 'Первое лицо' : 'Третье лицо';
+                    }
+                    if(e.key === 'r' || e.key === 'к') {
+                        document.getElementById('ragdoll-toggle').click();
+                    }
+                    if(e.key === ' ') {
+                        document.getElementById('jump-btn').click();
+                    }
+                });
+                
+                window.addEventListener('keyup', (e) => {
+                    keys[e.key.toLowerCase()] = false;
+                });
+                
+                // 12. Создание крови
+                function createBloodSplat() {
+                    bloodCount++;
+                    document.getElementById('blood-count').textContent = bloodCount;
+                    
+                    const blood = document.createElement('div');
+                    blood.className = 'blood-splat';
+                    blood.style.left = Math.random() * window.innerWidth + 'px';
+                    blood.style.top = Math.random() * window.innerHeight + 'px';
+                    document.getElementById('game-container').appendChild(blood);
+                    
+                    setTimeout(() => {
+                        if(blood.parentNode) {
+                            blood.parentNode.removeChild(blood);
+                        }
+                    }, 3000);
+                }
+                
+                // 13. Анимация
+                function animate() {
+                    requestAnimationFrame(animate);
+                    
+                    // Управление движением
+                    if(!isRagdoll) {
+                        let moveX = 0;
+                        let moveZ = 0;
+                        
+                        // Джойстик
+                        if(joystickActive) {
+                            moveX = joystickVector.x * 0.2;
+                            moveZ = joystickVector.y * 0.2;
+                        }
+                        
+                        // Клавиатура
+                        if(keys['w'] || keys['ц']) moveZ = -0.2;
+                        if(keys['s'] || keys['ы']) moveZ = 0.2;
+                        if(keys['a'] || keys['ф']) moveX = -0.2;
+                        if(keys['d'] || keys['в']) moveX = 0.2;
+                        
+                        // Применение движения
+                        if(moveX !== 0 || moveZ !== 0) {
+                            playerGroup.position.x += moveX;
+                            playerGroup.position.z += moveZ;
+                            
+                            // Поворот в сторону движения
+                            playerRotation = Math.atan2(moveX, moveZ);
+                            playerGroup.rotation.y = playerRotation;
+                            
+                            // Анимация ходьбы
+                            legAnimation += 0.3;
+                            const leftLeg = playerGroup.children[2];
+                            const rightLeg = playerGroup.children[3];
+                            leftLeg.position.y = -1.4 + Math.sin(legAnimation) * 0.2;
+                            rightLeg.position.y = -1.4 - Math.sin(legAnimation) * 0.2;
+                        }
+                        
+                        // Проверка падения с высоты
+                        if(playerGroup.position.y < -5) {
                             createBloodSplat();
-                            if(isRagdoll) return;
-                            isRagdoll = true;
-                            document.getElementById('ragdoll-toggle').textContent = 'Ragdoll ВЫКЛ';
-                            document.getElementById('state').textContent = 'Тряпка';
+                            document.getElementById('ragdoll-toggle').click();
+                            playerGroup.position.set(0, 1, 0);
                         }
                     }
-                }
-            });
-
-            // Обнаружение падений
-            if(playerBody) {
-                const currentY = playerBody.position.y;
-                
-                if(currentY < lastY) {
-                    if(fallStartY - currentY > 10 && !isRagdoll) {
-                        createBloodSplat();
-                        isRagdoll = true;
-                        document.getElementById('ragdoll-toggle').textContent = 'Ragdoll ВЫКЛ';
-                        document.getElementById('state').textContent = 'Тряпка';
+                    
+                    // Обновление камеры
+                    if(isFirstPerson) {
+                        camera.position.set(
+                            playerGroup.position.x,
+                            playerGroup.position.y + 1.5,
+                            playerGroup.position.z
+                        );
+                        camera.rotation.y = playerRotation;
+                    } else {
+                        camera.position.set(
+                            playerGroup.position.x,
+                            playerGroup.position.y + 5,
+                            playerGroup.position.z + 8
+                        );
+                        camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1, playerGroup.position.z);
                     }
-                } else {
-                    fallStartY = currentY;
+                    
+                    renderer.render(scene, camera);
                 }
-                lastY = currentY;
+                
+                // 14. Ресайз окна
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+                
+                // 15. Запуск анимации
+                animate();
+                
+                // 16. Логирование успеха
+                console.log('3D игра успешно запущена!');
+                
+            } catch (error) {
+                console.error('Ошибка при запуске игры:', error);
+                document.getElementById('loading').textContent = 'Ошибка загрузки 3D';
+                document.getElementById('loading').style.display = 'block';
             }
-
-            renderer.render(scene, camera);
         }
-
-        // Обработка клавиатуры
-        window.addEventListener('keydown', (e) => {
-            keys[e.key.toLowerCase()] = true;
-            
-            if(e.key === ' ') { // Пробел
-                if(!isRagdoll) {
-                    playerBody.velocity.y = 15;
-                }
-            }
-            
-            if(e.key === 'r' || e.key === 'к') { // Режим ragdoll
-                isRagdoll = !isRagdoll;
-                document.getElementById('ragdoll-toggle').textContent = 
-                    isRagdoll ? 'Ragdoll ВЫКЛ' : 'Ragdoll ВКЛ';
-                document.getElementById('state').textContent = isRagdoll ? 'Тряпка' : 'Жив';
-            }
-            
-            if(e.key === 'c' || e.key === 'с') { // Переключение камеры
-                isFirstPerson = !isFirstPerson;
-                document.getElementById('mode').textContent = isFirstPerson ? 'Первое лицо' : 'Третье лицо';
-            }
-        });
-
-        window.addEventListener('keyup', (e) => {
-            keys[e.key.toLowerCase()] = false;
-        });
-
-        // Адаптивность
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // Запуск
-        animate();
     </script>
 </body>
-  </html>
+</html>
