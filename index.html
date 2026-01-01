@@ -1,521 +1,172 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3D Ragdoll Game</title>
-    <style>
-        * { margin: 0; padding: 0; }
-        body { 
-            font-family: Arial, sans-serif; 
-            overflow: hidden; 
-            background: #000;
-            color: white;
-            touch-action: none;
-        }
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-        canvas { 
-            display: block; 
-            background: linear-gradient(to bottom, #000000, #1a1a2e);
-        }
-        #ui {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 15px;
-            padding: 10px;
-        }
-        .control-btn {
-            background: rgba(44, 62, 80, 0.9);
-            border: 3px solid #3498db;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 20px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            user-select: none;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            transition: all 0.2s;
-            min-width: 140px;
-            text-align: center;
-            z-index: 1000;
-        }
-        .control-btn:active {
-            background: rgba(26, 37, 47, 0.9);
-            transform: scale(0.95);
-        }
-        #joystick-container {
-            position: absolute;
-            left: 30px;
-            bottom: 30px;
-            width: 150px;
-            height: 150px;
-            z-index: 1000;
-        }
-        #joystick {
-            width: 100%;
-            height: 100%;
-            background: rgba(44, 62, 80, 0.7);
-            border-radius: 50%;
-            border: 3px solid #3498db;
-            position: relative;
-        }
-        #joystick-handle {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            background: #e74c3c;
-            border-radius: 50%;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            border: 3px solid #c0392b;
-        }
-        #camera-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(155, 89, 182, 0.9);
-            border-color: #8e44ad;
-        }
-        #ragdoll-toggle {
-            background: rgba(231, 76, 60, 0.9);
-            border-color: #c0392b;
-        }
-        #jump-btn {
-            background: rgba(46, 204, 113, 0.9);
-            border-color: #27ae60;
-        }
-        #attack-btn {
-            background: rgba(243, 156, 18, 0.9);
-            border-color: #d35400;
-        }
-        #stats {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 16px;
-            z-index: 1000;
-        }
-        .blood-splat {
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            background: radial-gradient(circle, #8b0000 0%, transparent 70%);
-            pointer-events: none;
-            opacity: 0.8;
-            border-radius: 50%;
-            z-index: 100;
-        }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 24px;
-            z-index: 1000;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Minecraft Style Demo</title>
+<style>
+body { margin:0; overflow:hidden; background:#000; }
+#ui {
+ position:fixed; top:10px; left:10px; z-index:10; color:white; font-family:Arial;
+}
+button {
+ padding:10px; margin:5px;
+}
+#mobile { position:fixed; bottom:20px; right:20px; display:flex; gap:10px; z-index:10; }
+</style>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="game-canvas"></canvas>
-        <div id="loading">Загрузка 3D...</div>
-        
-        <div id="joystick-container">
-            <div id="joystick">
-                <div id="joystick-handle"></div>
-            </div>
-        </div>
 
-        <div id="stats">
-            Режим: <span id="mode">Третье лицо</span><br>
-            Состояние: <span id="state">Жив</span><br>
-            Кровь: <span id="blood-count">0</span>
-        </div>
+<div id="ui">
+ <button onclick="toggleBlood()">Кровь: выкл</button>
+ <button onclick="spawnMob()">Спавн моба</button>
+</div>
 
-        <button id="camera-toggle" class="control-btn">Камера</button>
+<div id="mobile">
+ <button onclick="hitMode=true">Бить</button>
+ <button onclick="hitMode=false">Офф</button>
+</div>
 
-        <div id="ui">
-            <button id="ragdoll-toggle" class="control-btn">Ragdoll ВКЛ</button>
-            <button id="jump-btn" class="control-btn">Прыжок</button>
-            <button id="attack-btn" class="control-btn">Атака</button>
-            <button id="reset-btn" class="control-btn">Сброс</button>
-        </div>
-    </div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
 
-    <!-- Только необходимые библиотеки -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // Ждём загрузки всех ресурсов
-        window.addEventListener('load', () => {
-            document.getElementById('loading').style.display = 'none';
-            initGame();
-        });
+<script>
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x202020);
 
-        function initGame() {
-            try {
-                // 1. Создаём сцену
-                const scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x000000);
-                
-                // 2. Создаём камеру
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(0, 5, 10);
-                
-                // 3. Создаём рендерер
-                const canvas = document.getElementById('game-canvas');
-                const renderer = new THREE.WebGLRenderer({ 
-                    canvas: canvas,
-                    antialias: true,
-                    alpha: false
-                });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
-                renderer.shadowMap.enabled = true;
-                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                
-                // 4. Освещение
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                scene.add(ambientLight);
-                
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(10, 20, 5);
-                directionalLight.castShadow = true;
-                scene.add(directionalLight);
-                
-                // 5. Создаём землю
-                const groundGeometry = new THREE.PlaneGeometry(100, 100);
-                const groundMaterial = new THREE.MeshLambertMaterial({ 
-                    color: 0x2d572c,
-                    side: THREE.DoubleSide
-                });
-                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-                ground.rotation.x = -Math.PI / 2;
-                ground.position.y = -0.1;
-                ground.receiveShadow = true;
-                scene.add(ground);
-                
-                // 6. Создаём игрока
-                const playerGroup = new THREE.Group();
-                
-                // Тело
-                const bodyGeometry = new THREE.BoxGeometry(0.8, 1.8, 0.5);
-                const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x3498db });
-                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                body.castShadow = true;
-                playerGroup.add(body);
-                
-                // Голова
-                const headGeometry = new THREE.SphereGeometry(0.4, 16, 16);
-                const headMaterial = new THREE.MeshLambertMaterial({ color: 0xffcc99 });
-                const head = new THREE.Mesh(headGeometry, headMaterial);
-                head.position.y = 1.3;
-                head.castShadow = true;
-                playerGroup.add(head);
-                
-                // Ноги
-                const legGeometry = new THREE.BoxGeometry(0.3, 1, 0.3);
-                const legMaterial = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
-                
-                const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
-                leftLeg.position.set(-0.2, -1.4, 0);
-                leftLeg.castShadow = true;
-                playerGroup.add(leftLeg);
-                
-                const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
-                rightLeg.position.set(0.2, -1.4, 0);
-                rightLeg.castShadow = true;
-                playerGroup.add(rightLeg);
-                
-                // Руки
-                const armGeometry = new THREE.BoxGeometry(0.2, 0.8, 0.2);
-                const armMaterial = new THREE.MeshLambertMaterial({ color: 0xffcc99 });
-                
-                const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-                leftArm.position.set(-0.6, 0.5, 0);
-                leftArm.castShadow = true;
-                playerGroup.add(leftArm);
-                
-                const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-                rightArm.position.set(0.6, 0.5, 0);
-                rightArm.castShadow = true;
-                playerGroup.add(rightArm);
-                
-                playerGroup.position.set(0, 1, 0);
-                scene.add(playerGroup);
-                
-                // 7. Создаём несколько препятствий
-                const obstacleGeometry = new THREE.BoxGeometry(3, 5, 1);
-                const obstacleMaterial = new THREE.MeshLambertMaterial({ color: 0x7f8c8d });
-                
-                for(let i = 0; i < 5; i++) {
-                    const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-                    obstacle.position.set(
-                        Math.random() * 40 - 20,
-                        2.5,
-                        Math.random() * 40 - 20
-                    );
-                    obstacle.castShadow = true;
-                    obstacle.receiveShadow = true;
-                    scene.add(obstacle);
-                }
-                
-                // 8. Переменные управления
-                let keys = {};
-                let isRagdoll = false;
-                let isFirstPerson = false;
-                let playerVelocity = { x: 0, z: 0 };
-                let playerRotation = 0;
-                let joystickActive = false;
-                let joystickVector = { x: 0, y: 0 };
-                let bloodCount = 0;
-                let legAnimation = 0;
-                
-                // 9. Джойстик для мобильных
-                const joystick = document.getElementById('joystick');
-                const joystickHandle = document.getElementById('joystick-handle');
-                
-                function updateJoystickPosition(e) {
-                    const rect = joystick.getBoundingClientRect();
-                    const centerX = rect.left + rect.width / 2;
-                    const centerY = rect.top + rect.height / 2;
-                    
-                    let x = e.clientX - centerX;
-                    let y = e.clientY - centerY;
-                    const distance = Math.sqrt(x * x + y * y);
-                    const maxDistance = 50;
-                    
-                    if(distance > maxDistance) {
-                        const angle = Math.atan2(y, x);
-                        x = Math.cos(angle) * maxDistance;
-                        y = Math.sin(angle) * maxDistance;
-                    }
-                    
-                    joystickHandle.style.transform = `translate(${x}px, ${y}px)`;
-                    joystickVector = {
-                        x: x / maxDistance,
-                        y: -y / maxDistance
-                    };
-                }
-                
-                joystick.addEventListener('touchstart', (e) => {
-                    joystickActive = true;
-                    updateJoystickPosition(e.touches[0]);
-                    e.preventDefault();
-                });
-                
-                document.addEventListener('touchmove', (e) => {
-                    if(joystickActive) {
-                        updateJoystickPosition(e.touches[0]);
-                        e.preventDefault();
-                    }
-                });
-                
-                document.addEventListener('touchend', () => {
-                    joystickActive = false;
-                    joystickHandle.style.transform = 'translate(-50%, -50%)';
-                    joystickVector = { x: 0, y: 0 };
-                });
-                
-                // 10. Обработка кнопок
-                document.getElementById('camera-toggle').addEventListener('click', () => {
-                    isFirstPerson = !isFirstPerson;
-                    document.getElementById('mode').textContent = isFirstPerson ? 'Первое лицо' : 'Третье лицо';
-                });
-                
-                document.getElementById('ragdoll-toggle').addEventListener('click', () => {
-                    isRagdoll = !isRagdoll;
-                    document.getElementById('ragdoll-toggle').textContent = 
-                        isRagdoll ? 'Ragdoll ВЫКЛ' : 'Ragdoll ВКЛ';
-                    document.getElementById('state').textContent = isRagdoll ? 'Тряпка' : 'Жив';
-                    
-                    if(isRagdoll) {
-                        // Анимация падения
-                        playerGroup.rotation.x = Math.random() * Math.PI;
-                        playerGroup.rotation.z = Math.random() * Math.PI;
-                    } else {
-                        playerGroup.rotation.x = 0;
-                        playerGroup.rotation.z = 0;
-                    }
-                });
-                
-                document.getElementById('jump-btn').addEventListener('click', () => {
-                    if(!isRagdoll) {
-                        playerGroup.position.y += 2;
-                        setTimeout(() => {
-                            if(playerGroup.position.y > 1) {
-                                playerGroup.position.y = 1;
-                            }
-                        }, 300);
-                    }
-                });
-                
-                document.getElementById('attack-btn').addEventListener('click', () => {
-                    // Анимация удара
-                    const rightArm = playerGroup.children[4];
-                    const originalY = rightArm.position.y;
-                    
-                    let swing = 0;
-                    const interval = setInterval(() => {
-                        swing += 0.1;
-                        rightArm.position.y = originalY - Math.sin(swing) * 0.5;
-                        rightArm.rotation.z = Math.sin(swing) * 0.5;
-                        
-                        if(swing > Math.PI) {
-                            clearInterval(interval);
-                            rightArm.position.y = originalY;
-                            rightArm.rotation.z = 0;
-                        }
-                    }, 16);
-                });
-                
-                document.getElementById('reset-btn').addEventListener('click', () => {
-                    playerGroup.position.set(0, 1, 0);
-                    playerGroup.rotation.set(0, 0, 0);
-                    playerVelocity = { x: 0, z: 0 };
-                    bloodCount = 0;
-                    document.getElementById('blood-count').textContent = '0';
-                    isRagdoll = false;
-                    document.getElementById('ragdoll-toggle').textContent = 'Ragdoll ВКЛ';
-                    document.getElementById('state').textContent = 'Жив';
-                });
-                
-                // 11. Клавиатура для десктопа
-                window.addEventListener('keydown', (e) => {
-                    keys[e.key.toLowerCase()] = true;
-                    
-                    if(e.key === 'c' || e.key === 'с') {
-                        isFirstPerson = !isFirstPerson;
-                        document.getElementById('mode').textContent = isFirstPerson ? 'Первое лицо' : 'Третье лицо';
-                    }
-                    if(e.key === 'r' || e.key === 'к') {
-                        document.getElementById('ragdoll-toggle').click();
-                    }
-                    if(e.key === ' ') {
-                        document.getElementById('jump-btn').click();
-                    }
-                });
-                
-                window.addEventListener('keyup', (e) => {
-                    keys[e.key.toLowerCase()] = false;
-                });
-                
-                // 12. Создание крови
-                function createBloodSplat() {
-                    bloodCount++;
-                    document.getElementById('blood-count').textContent = bloodCount;
-                    
-                    const blood = document.createElement('div');
-                    blood.className = 'blood-splat';
-                    blood.style.left = Math.random() * window.innerWidth + 'px';
-                    blood.style.top = Math.random() * window.innerHeight + 'px';
-                    document.getElementById('game-container').appendChild(blood);
-                    
-                    setTimeout(() => {
-                        if(blood.parentNode) {
-                            blood.parentNode.removeChild(blood);
-                        }
-                    }, 3000);
-                }
-                
-                // 13. Анимация
-                function animate() {
-                    requestAnimationFrame(animate);
-                    
-                    // Управление движением
-                    if(!isRagdoll) {
-                        let moveX = 0;
-                        let moveZ = 0;
-                        
-                        // Джойстик
-                        if(joystickActive) {
-                            moveX = joystickVector.x * 0.2;
-                            moveZ = joystickVector.y * 0.2;
-                        }
-                        
-                        // Клавиатура
-                        if(keys['w'] || keys['ц']) moveZ = -0.2;
-                        if(keys['s'] || keys['ы']) moveZ = 0.2;
-                        if(keys['a'] || keys['ф']) moveX = -0.2;
-                        if(keys['d'] || keys['в']) moveX = 0.2;
-                        
-                        // Применение движения
-                        if(moveX !== 0 || moveZ !== 0) {
-                            playerGroup.position.x += moveX;
-                            playerGroup.position.z += moveZ;
-                            
-                            // Поворот в сторону движения
-                            playerRotation = Math.atan2(moveX, moveZ);
-                            playerGroup.rotation.y = playerRotation;
-                            
-                            // Анимация ходьбы
-                            legAnimation += 0.3;
-                            const leftLeg = playerGroup.children[2];
-                            const rightLeg = playerGroup.children[3];
-                            leftLeg.position.y = -1.4 + Math.sin(legAnimation) * 0.2;
-                            rightLeg.position.y = -1.4 - Math.sin(legAnimation) * 0.2;
-                        }
-                        
-                        // Проверка падения с высоты
-                        if(playerGroup.position.y < -5) {
-                            createBloodSplat();
-                            document.getElementById('ragdoll-toggle').click();
-                            playerGroup.position.set(0, 1, 0);
-                        }
-                    }
-                    
-                    // Обновление камеры
-                    if(isFirstPerson) {
-                        camera.position.set(
-                            playerGroup.position.x,
-                            playerGroup.position.y + 1.5,
-                            playerGroup.position.z
-                        );
-                        camera.rotation.y = playerRotation;
-                    } else {
-                        camera.position.set(
-                            playerGroup.position.x,
-                            playerGroup.position.y + 5,
-                            playerGroup.position.z + 8
-                        );
-                        camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1, playerGroup.position.z);
-                    }
-                    
-                    renderer.render(scene, camera);
-                }
-                
-                // 14. Ресайз окна
-                window.addEventListener('resize', () => {
-                    camera.aspect = window.innerWidth / window.innerHeight;
-                    camera.updateProjectionMatrix();
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                });
-                
-                // 15. Запуск анимации
-                animate();
-                
-                // 16. Логирование успеха
-                console.log('3D игра успешно запущена!');
-                
-            } catch (error) {
-                console.error('Ошибка при запуске игры:', error);
-                document.getElementById('loading').textContent = 'Ошибка загрузки 3D';
-                document.getElementById('loading').style.display = 'block';
-            }
-        }
-    </script>
+let camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(5,5,10);
+
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+let controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+// свет
+let light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,10,10);
+scene.add(light);
+
+// физика
+const world = new CANNON.World({
+ gravity: new CANNON.Vec3(0,-9.82,0)
+});
+
+// пол
+let groundBody = new CANNON.Body({
+ mass:0,
+ shape:new CANNON.Box(new CANNON.Vec3(50,1,50)),
+ position:new CANNON.Vec3(0,-1,0)
+});
+world.addBody(groundBody);
+
+let groundGeo = new THREE.BoxGeometry(100,2,100);
+let groundMat = new THREE.MeshStandardMaterial({color:0x228833});
+let groundMesh = new THREE.Mesh(groundGeo, groundMat);
+groundMesh.position.y = -1;
+scene.add(groundMesh);
+
+let objects = [];
+let bloodEnabled = false;
+let hitMode = true;
+
+// функция крови / конфетти
+function particleBurst(position){
+ let color = bloodEnabled ? 0xaa0000 : 0xffff00;
+ for(let i=0;i<15;i++){
+   let g = new THREE.SphereGeometry(0.05);
+   let m = new THREE.MeshStandardMaterial({color});
+   let p = new THREE.Mesh(g,m);
+   p.position.copy(position);
+   scene.add(p);
+   let vel = new THREE.Vector3(
+     (Math.random()-0.5)*3,
+     Math.random()*3,
+     (Math.random()-0.5)*3
+   );
+   let life = 60;
+   p.userData.update = ()=>{
+     p.position.add(vel);
+     vel.y -= 0.05;
+     life--;
+     if(life<=0){ scene.remove(p); }
+   };
+   particles.push(p);
+ }
+}
+
+let particles = [];
+
+function spawnMob(){
+ let size = 1;
+ let boxGeo = new THREE.BoxGeometry(size,size,size);
+ let boxMat = new THREE.MeshStandardMaterial({color:0x8888ff});
+ let mesh = new THREE.Mesh(boxGeo, boxMat);
+ mesh.position.set((Math.random()*6)-3,2,(Math.random()*6)-3);
+ scene.add(mesh);
+
+ let body = new CANNON.Body({
+   mass:1,
+   shape:new CANNON.Box(new CANNON.Vec3(size/2,size/2,size/2)),
+   position: new CANNON.Vec3(mesh.position.x,mesh.position.y,mesh.position.z)
+ });
+ world.addBody(body);
+
+ objects.push({mesh, body});
+}
+
+function toggleBlood(){
+ bloodEnabled = !bloodEnabled;
+ document.querySelector("#ui button").innerText = "Кровь: " + (bloodEnabled?"вкл":"выкл");
+}
+
+// Raycast удар
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+
+function hit(x,y){
+ if(!hitMode) return;
+
+ mouse.x = (x / innerWidth) * 2 - 1;
+ mouse.y = -(y / innerHeight) * 2 + 1;
+
+ raycaster.setFromCamera(mouse,camera);
+ let intersects = raycaster.intersectObjects(objects.map(o=>o.mesh));
+
+ if(intersects.length>0){
+   let obj = objects.find(o=>o.mesh===intersects[0].object);
+   if(obj){
+     obj.body.applyImpulse(
+       new CANNON.Vec3((Math.random()-0.5)*10,5,(Math.random()-0.5)*10),
+       obj.body.position
+     );
+     particleBurst(obj.mesh.position);
+   }
+ }
+}
+
+window.addEventListener("click", e=>hit(e.clientX,e.clientY));
+window.addEventListener("touchstart", e=>{
+ let t = e.touches[0];
+ hit(t.clientX,t.clientY);
+});
+
+// цикл
+function animate(){
+ requestAnimationFrame(animate);
+ world.step(1/60);
+
+ objects.forEach(o=>{
+   o.mesh.position.copy(o.body.position);
+   o.mesh.quaternion.copy(o.body.quaternion);
+ });
+
+ particles.forEach(p=>p.userData.update && p.userData.update());
+ renderer.render(scene,camera);
+}
+
+animate();
+</script>
 </body>
 </html>
